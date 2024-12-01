@@ -1,42 +1,27 @@
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.neighbors import NearestNeighbors
+from sklearn.model_selection import train_test_split
 
-title_basics = pd.read_csv("data/title.basics.tsv/title.basics.tsv", sep="\t", na_values="\\N")
-title_ratings = pd.read_csv("data/title.ratings.tsv/title.ratings.tsv", sep="\t", na_values="\\N")
+def load_data(title_basics_path, title_ratings_path):
+    title_basics = pd.read_csv(title_basics_path, sep="\t", na_values="\\N")
+    title_ratings = pd.read_csv(title_ratings_path, sep="\t", na_values="\\N")
+    movies = pd.merge(title_basics, title_ratings, on="tconst")
+    movies = movies.dropna(subset=["primaryTitle", "averageRating", "genres"])
+    movies = movies[movies["titleType"] == "movie"]
+    movies.reset_index(drop=True, inplace=True)
+    return movies
 
-movies = pd.merge(title_basics, title_ratings, on="tconst")
+def create_genre_matrix(movies):
+    tfidf = TfidfVectorizer()
+    genre_matrix = tfidf.fit_transform(movies["genres"])
+    return genre_matrix, tfidf
 
-movies = movies.dropna(subset=["primaryTitle", "averageRating", "genres"])
+def build_nn_model(genre_matrix, n_neighbors=10):
+    nn_model = NearestNeighbors(metric="cosine", algorithm="brute", n_neighbors=n_neighbors)
+    nn_model.fit(genre_matrix)
+    return nn_model
 
-movies = movies[movies["titleType"] == "movie"]
-
-movies.reset_index(drop=True, inplace=True)
-
-print(movies.head())
-
-tfidf = TfidfVectorizer()
-genre_matrix = tfidf.fit_transform(movies["genres"])
-
-nn_model = NearestNeighbors(metric="cosine", algorithm="brute")
-nn_model.fit(genre_matrix)
-
-def recommend_movies(movie_title, n_recommendations=5):
-    movie_index = movies[movies["primaryTitle"] == movie_title].index[0]
-    
-    movie_vector = genre_matrix[movie_index]
-    
-    distances, indices = nn_model.kneighbors(movie_vector, n_neighbors=n_recommendations + 1)
-    
-    recommended_indices = indices[0][1:]
-    
-    recommended_movies = movies.iloc[recommended_indices][["primaryTitle", "averageRating", "genres"]]
-    return recommended_movies
-
-print(recommend_movies("The Matrix", n_recommendations=5))
+def split_data(movies, test_size=0.2, random_state=42):
+    train_data, test_data = train_test_split(movies, test_size=test_size, random_state=random_state)
+    return train_data, test_data
